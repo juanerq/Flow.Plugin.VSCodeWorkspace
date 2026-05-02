@@ -34,6 +34,15 @@ namespace Flow.Plugin.VSCodeWorkspaces
             Save();
         }
 
+        private void ButtonRestoreHidden_Click(object sender, RoutedEventArgs e)
+        {
+            foreach (var ws in hiddenListView.SelectedItems.Cast<string>().ToArray())
+            {
+                _settings.HiddenWorkspaces.Remove(ws);
+            }
+            Save();
+        }
+
         private void ButtonAdd_Click(object sender, RoutedEventArgs e)
         {
             try

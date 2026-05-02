@@ -52,7 +52,9 @@ namespace Flow.Plugin.VSCodeWorkspaces
             }
 
             // Simple de-duplication
+            var hiddenWorkspaces = new HashSet<string>(_settings.HiddenWorkspaces, StringComparer.OrdinalIgnoreCase);
             results.AddRange(workspaces.Distinct()
+                .Where(ws => !hiddenWorkspaces.Contains(ws.Path))
                 .Select(CreateWorkspaceResult)
             );
 
@@ -232,7 +234,44 @@ namespace Flow.Plugin.VSCodeWorkspaces
                 });
             }
 
+            if (selectedResult.ContextData is VsCodeWorkspace workspace)
+            {
+                results.Add(new Result
+                {
+                    Title = "Hide workspace",
+                    SubTitle = "Remove this workspace from VS Code Workspaces search results",
+                    Icon = workspace.VSCodeInstance.WorkspaceIcon,
+                    TitleToolTip = "You can restore hidden workspaces from the plugin settings.",
+                    Action = c =>
+                    {
+                        HideWorkspace(workspace);
+                        Context.API.ShowMsg(Name, $"Hidden: {workspace.FolderName}", string.Empty);
+                        return false;
+                    },
+                    ContextData = workspace,
+                });
+            }
+
             return results;
+        }
+
+        private static void HideWorkspace(VsCodeWorkspace workspace)
+        {
+            var workspacePath = workspace.Path.ToString();
+
+            if (!_settings.HiddenWorkspaces.Contains(workspacePath, StringComparer.OrdinalIgnoreCase))
+            {
+                _settings.HiddenWorkspaces.Add(workspacePath);
+            }
+
+            var customWorkspace = _settings.CustomWorkspaces.FirstOrDefault(uri =>
+                string.Equals(uri, workspacePath, StringComparison.OrdinalIgnoreCase));
+            if (customWorkspace != null)
+            {
+                _settings.CustomWorkspaces.Remove(customWorkspace);
+            }
+
+            Context.API.SaveSettingJsonStorage<Settings>();
         }
     }
 }

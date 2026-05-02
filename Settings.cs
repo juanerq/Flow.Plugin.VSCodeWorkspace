@@ -9,5 +9,7 @@ namespace Flow.Plugin.VSCodeWorkspaces
         public bool DiscoverMachines { get; set; } = true;
 
         public ObservableCollection<string> CustomWorkspaces { get; set; } = new();
+
+        public ObservableCollection<string> HiddenWorkspaces { get; set; } = new();
     }
 }
