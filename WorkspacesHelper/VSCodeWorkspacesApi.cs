@@ -101,8 +101,18 @@ namespace Flow.Plugin.VSCodeWorkspaces.WorkspacesHelper
                     }
 
                     // for vscode v1.64.0 or later
-                    using var connection = new SqliteConnection(
-                        $"Data Source={vscodeInstance.AppData}/User/globalStorage/state.vscdb;mode=readonly;cache=shared;");
+                    var stateDatabasePath = GetStateDatabasePath(vscodeInstance);
+                    if (stateDatabasePath == null)
+                        continue;
+
+                    var connectionString = new SqliteConnectionStringBuilder
+                    {
+                        DataSource = stateDatabasePath,
+                        Mode = SqliteOpenMode.ReadOnly,
+                        Cache = SqliteCacheMode.Shared
+                    }.ToString();
+
+                    using var connection = new SqliteConnection(connectionString);
                     connection.Open();
                     var command = connection.CreateCommand();
                     command.CommandText = "SELECT value FROM ItemTable where key = 'history.recentlyOpenedPathsList'";
@@ -131,6 +141,33 @@ namespace Flow.Plugin.VSCodeWorkspaces.WorkspacesHelper
 
                 return results;
             }
+        }
+
+        [CanBeNull]
+        private static string GetStateDatabasePath(VSCodeInstance vscodeInstance)
+        {
+            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var oldPath = Path.Combine(vscodeInstance.AppData, "User", "globalStorage", "state.vscdb");
+
+            if (string.IsNullOrEmpty(userProfile))
+                return File.Exists(oldPath) ? oldPath : null;
+
+            var sharedStorageFolder = vscodeInstance.VSCodeVersion == VSCodeVersion.Insiders
+                ? ".vscode-insiders-shared"
+                : ".vscode-shared";
+
+            var newPath = Path.Combine(userProfile, sharedStorageFolder, "sharedStorage", "state.vscdb");
+            if (File.Exists(newPath))
+                return newPath;
+
+            if (vscodeInstance.VSCodeVersion == VSCodeVersion.Insiders)
+            {
+                var stableSharedPath = Path.Combine(userProfile, ".vscode-shared", "sharedStorage", "state.vscdb");
+                if (File.Exists(stableSharedPath))
+                    return stableSharedPath;
+            }
+
+            return File.Exists(oldPath) ? oldPath : null;
         }
 
         [CanBeNull]
