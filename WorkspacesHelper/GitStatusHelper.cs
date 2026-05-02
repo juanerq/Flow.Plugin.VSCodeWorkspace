@@ -8,6 +8,8 @@ namespace Flow.Plugin.VSCodeWorkspaces.WorkspacesHelper
     {
         private const int TimeoutMilliseconds = 700;
 
+        private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(2);
+
         private static readonly Dictionary<string, CacheEntry> Cache = new(StringComparer.OrdinalIgnoreCase);
 
         public static string GetStatus(VsCodeWorkspace workspace)
@@ -19,9 +21,9 @@ namespace Flow.Plugin.VSCodeWorkspaces.WorkspacesHelper
             if (string.IsNullOrEmpty(workspacePath))
                 return null;
 
-            var cacheKey = $"{workspace.WorkspaceLocation}|{workspace.ExtraInfo}|{workspacePath}";
+            var cacheKey = GetCacheKey(workspace, workspacePath);
             if (Cache.TryGetValue(cacheKey, out var cacheEntry) &&
-                DateTimeOffset.UtcNow - cacheEntry.CreatedAt < TimeSpan.FromSeconds(30))
+                DateTimeOffset.UtcNow - cacheEntry.CreatedAt < CacheDuration)
             {
                 return cacheEntry.Status;
             }
@@ -32,6 +34,20 @@ namespace Flow.Plugin.VSCodeWorkspaces.WorkspacesHelper
 
             Cache[cacheKey] = new CacheEntry(DateTimeOffset.UtcNow, status);
             return status;
+        }
+
+        public static void ClearCache(VsCodeWorkspace workspace)
+        {
+            var workspacePath = GetWorkspaceDirectory(workspace);
+            if (string.IsNullOrEmpty(workspacePath))
+                return;
+
+            Cache.Remove(GetCacheKey(workspace, workspacePath));
+        }
+
+        private static string GetCacheKey(VsCodeWorkspace workspace, string workspacePath)
+        {
+            return $"{workspace.WorkspaceLocation}|{workspace.ExtraInfo}|{workspacePath}";
         }
 
         private static string GetWorkspaceDirectory(VsCodeWorkspace workspace)

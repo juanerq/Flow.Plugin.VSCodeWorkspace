@@ -158,6 +158,8 @@ namespace Flow.Plugin.VSCodeWorkspaces
                 {
                     try
                     {
+                        GitStatusHelper.ClearCache(ws);
+
                         var modifierKeys = c.SpecialKeyState.ToModifierKeys();
                         if (modifierKeys == System.Windows.Input.ModifierKeys.Control)
                         {
@@ -265,6 +267,7 @@ namespace Flow.Plugin.VSCodeWorkspaces
                     Action = c =>
                     {
                         HideWorkspace(workspace);
+                        _workspacesApi.ClearCache();
                         Context.API.ShowMsg(Name, $"Hidden: {workspace.FolderName}", string.Empty);
                         return false;
                     },
@@ -275,7 +278,7 @@ namespace Flow.Plugin.VSCodeWorkspaces
             return results;
         }
 
-        private static void HideWorkspace(VsCodeWorkspace workspace)
+        private void HideWorkspace(VsCodeWorkspace workspace)
         {
             var workspacePath = workspace.Path.ToString();
 

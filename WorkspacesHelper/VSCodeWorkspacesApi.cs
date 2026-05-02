@@ -16,6 +16,12 @@ namespace Flow.Plugin.VSCodeWorkspaces.WorkspacesHelper
 {
     public class VSCodeWorkspacesApi
     {
+        private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(15);
+
+        private List<VsCodeWorkspace> _cachedWorkspaces;
+
+        private DateTimeOffset _cacheExpiresAt;
+
         public VSCodeWorkspacesApi()
         {
         }
@@ -56,6 +62,9 @@ namespace Flow.Plugin.VSCodeWorkspaces.WorkspacesHelper
         {
             get
             {
+                if (_cachedWorkspaces != null && DateTimeOffset.UtcNow < _cacheExpiresAt)
+                    return _cachedWorkspaces;
+
                 var results = new List<VsCodeWorkspace>();
 
                 foreach (var vscodeInstance in VSCodeInstances.Instances)
@@ -127,8 +136,16 @@ namespace Flow.Plugin.VSCodeWorkspaces.WorkspacesHelper
                     }
                 }
 
+                _cachedWorkspaces = results;
+                _cacheExpiresAt = DateTimeOffset.UtcNow.Add(CacheDuration);
                 return results;
             }
+        }
+
+        public void ClearCache()
+        {
+            _cachedWorkspaces = null;
+            _cacheExpiresAt = DateTimeOffset.MinValue;
         }
 
         [CanBeNull]
