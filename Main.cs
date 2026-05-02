@@ -131,9 +131,7 @@ namespace Flow.Plugin.VSCodeWorkspaces
 
             if (ws.WorkspaceLocation != WorkspaceLocation.Local)
             {
-                title = ws.Label != null
-                    ? $"{ws.Label}"
-                    : $"{title}{(ws.ExtraInfo != null ? $" - {ws.ExtraInfo}" : string.Empty)} ({typeWorkspace})";
+                title = $"{title}{(ws.ExtraInfo != null ? $" - {ws.ExtraInfo}" : string.Empty)} ({typeWorkspace})";
             }
 
             var tooltip =
