@@ -138,13 +138,17 @@ namespace Flow.Plugin.VSCodeWorkspaces
 
             var tooltip =
                 $"{Resources.Workspace}{(ws.WorkspaceLocation != WorkspaceLocation.Local ? $" {Resources.In} {typeWorkspace}" : string.Empty)}: {SystemPath.RealPath(ws.RelativePath)}";
+            var gitStatus = _settings.ShowGitStatus ? GitStatusHelper.GetStatus(ws) : null;
+            var subtitle = string.IsNullOrEmpty(gitStatus)
+                ? tooltip
+                : $"{tooltip}  |  {gitStatus}";
 
             return new Result
             {
                 Title = title,
-                SubTitle = tooltip,
+                SubTitle = subtitle,
                 Icon = ws.VSCodeInstance.WorkspaceIcon,
-                TitleToolTip = tooltip,
+                TitleToolTip = subtitle,
                 Action = c =>
                 {
                     try

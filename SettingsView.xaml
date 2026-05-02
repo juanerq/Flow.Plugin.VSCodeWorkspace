@@ -36,6 +36,13 @@
                 IsChecked="{Binding DiscoverMachines}"
                 ToolTip="{x:Static resx:Resources.DiscoverMachinesTooltip}"
                 Unchecked="Save" />
+            <CheckBox
+                Margin="70,8,10,8"
+                Checked="Save"
+                Content="Show Git status"
+                IsChecked="{Binding ShowGitStatus}"
+                ToolTip="Show branch and changed file counts in workspace results"
+                Unchecked="Save" />
         </StackPanel>
         <TextBlock
             Grid.Row="1"
