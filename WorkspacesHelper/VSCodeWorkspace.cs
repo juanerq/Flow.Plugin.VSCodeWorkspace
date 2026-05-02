@@ -20,6 +20,8 @@ namespace Flow.Plugin.VSCodeWorkspaces.WorkspacesHelper
 
         public string ExtraInfo { get; init; }
 
+        public string ProfileName { get; init; }
+
         public WorkspaceLocation WorkspaceLocation { get; init; }
         
         public WorkspaceType WorkspaceType { get; init; }

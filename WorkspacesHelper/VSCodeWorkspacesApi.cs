@@ -60,6 +60,10 @@ namespace Flow.Plugin.VSCodeWorkspaces.WorkspacesHelper
 
                 foreach (var vscodeInstance in VSCodeInstances.Instances)
                 {
+                    var vscodeStorageFile = ReadStorageFile(vscodeInstance);
+                    var profileNames = GetProfileNames(vscodeStorageFile);
+                    var profileAssociations = vscodeStorageFile?.ProfileAssociations?.Workspaces;
+
                     // for vscode v1.64.0 or later
                     var stateDatabasePath = GetStateDatabasePath(vscodeInstance);
                     if (stateDatabasePath != null)
@@ -85,12 +89,12 @@ namespace Flow.Plugin.VSCodeWorkspaces.WorkspacesHelper
                                 foreach (var entry in entries.EnumerateArray())
                                 {
                                     if (entry.TryGetProperty("folderUri", out var folderUri) &&
-                                        ParseFolderEntry(folderUri, vscodeInstance, entry) is { } folderWorkspace)
+                                        ParseFolderEntry(folderUri, vscodeInstance, entry, profileAssociations, profileNames) is { } folderWorkspace)
                                     {
                                         results.Add(folderWorkspace);
                                     }
                                     else if (entry.TryGetProperty("workspace", out var workspaceInfo) &&
-                                             ParseWorkspaceEntry(workspaceInfo, vscodeInstance, entry) is { } workspace)
+                                             ParseWorkspaceEntry(workspaceInfo, vscodeInstance, entry, profileAssociations, profileNames) is { } workspace)
                                     {
                                         results.Add(workspace);
                                     }
@@ -99,49 +103,125 @@ namespace Flow.Plugin.VSCodeWorkspaces.WorkspacesHelper
                         }
                     }
 
-                    // storage.json contains opened Workspaces
-                    var vscodeStorage = Path.Combine(vscodeInstance.AppData, "storage.json");
-
-                    if (File.Exists(vscodeStorage))
+                    if (vscodeStorageFile != null)
                     {
-                        var fileContent = File.ReadAllText(vscodeStorage);
-
-                        try
+                        // for previous versions of vscode
+                        if (vscodeStorageFile.OpenedPathsList?.Workspaces3 != null)
                         {
-                            var vscodeStorageFile = JsonSerializer.Deserialize<VSCodeStorageFile>(fileContent);
-
-                            if (vscodeStorageFile != null)
-                            {
-                                // for previous versions of vscode
-                                if (vscodeStorageFile.OpenedPathsList?.Workspaces3 != null)
-                                {
-                                    results.AddRange(
-                                        vscodeStorageFile.OpenedPathsList.Workspaces3
-                                            .Select(workspaceUri => ParseVSCodeUri(workspaceUri, vscodeInstance))
-                                            .Where(uri => uri != null)
-                                            .Select(uri => (VsCodeWorkspace)uri));
-                                }
-
-                                // vscode v1.55.0 or later
-                                if (vscodeStorageFile.OpenedPathsList?.Entries != null)
-                                {
-                                    results.AddRange(vscodeStorageFile.OpenedPathsList.Entries
-                                        .Select(x => x.FolderUri)
-                                        .Select(workspaceUri => ParseVSCodeUri(workspaceUri, vscodeInstance))
-                                        .Where(uri => uri != null));
-                                }
-                            }
+                            results.AddRange(
+                                vscodeStorageFile.OpenedPathsList.Workspaces3
+                                    .Select(workspaceUri => WithProfile(ParseVSCodeUri(workspaceUri, vscodeInstance),
+                                        workspaceUri?.ToString(), profileAssociations, profileNames))
+                                    .Where(uri => uri != null)
+                                    .Select(uri => (VsCodeWorkspace)uri));
                         }
-                        catch (Exception ex)
+
+                        // vscode v1.55.0 or later
+                        if (vscodeStorageFile.OpenedPathsList?.Entries != null)
                         {
-                            var message = $"Failed to deserialize ${vscodeStorage}";
-                            Main.Context.API.LogException("VSCodeWorkspaceApi", message, ex);
+                            results.AddRange(vscodeStorageFile.OpenedPathsList.Entries
+                                .Select(x => WithProfile(ParseVSCodeUri(x.FolderUri, vscodeInstance), x.FolderUri,
+                                    profileAssociations, profileNames))
+                                .Where(uri => uri != null));
                         }
                     }
                 }
 
                 return results;
             }
+        }
+
+        [CanBeNull]
+        private static VSCodeStorageFile ReadStorageFile(VSCodeInstance vscodeInstance)
+        {
+            var storageFiles = new[]
+            {
+                Path.Combine(vscodeInstance.AppData, "storage.json"),
+                Path.Combine(vscodeInstance.AppData, "User", "globalStorage", "storage.json")
+            };
+
+            VSCodeStorageFile storageFile = null;
+            foreach (var vscodeStorage in storageFiles)
+            {
+                if (!File.Exists(vscodeStorage))
+                    continue;
+
+                try
+                {
+                    storageFile = MergeStorageFiles(storageFile,
+                        JsonSerializer.Deserialize<VSCodeStorageFile>(File.ReadAllText(vscodeStorage)));
+                }
+                catch (Exception ex)
+                {
+                    var message = $"Failed to deserialize ${vscodeStorage}";
+                    Main.Context.API.LogException("VSCodeWorkspaceApi", message, ex);
+                }
+            }
+
+            return storageFile;
+        }
+
+        private static VSCodeStorageFile MergeStorageFiles(VSCodeStorageFile current, VSCodeStorageFile next)
+        {
+            if (current == null)
+                return next;
+            if (next == null)
+                return current;
+
+            return new VSCodeStorageFile
+            {
+                OpenedPathsList = current.OpenedPathsList ?? next.OpenedPathsList,
+                ProfileAssociations = current.ProfileAssociations ?? next.ProfileAssociations,
+                UserDataProfiles = current.UserDataProfiles ?? next.UserDataProfiles
+            };
+        }
+
+        private static Dictionary<string, string> GetProfileNames(VSCodeStorageFile vscodeStorageFile)
+        {
+            var profileNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["__default__profile__"] = "Default"
+            };
+
+            if (vscodeStorageFile?.UserDataProfiles == null)
+                return profileNames;
+
+            foreach (var profile in vscodeStorageFile.UserDataProfiles)
+            {
+                if (!string.IsNullOrEmpty(profile.Location) && !string.IsNullOrEmpty(profile.Name))
+                    profileNames[profile.Location] = profile.Name;
+            }
+
+            return profileNames;
+        }
+
+        private static VsCodeWorkspace WithProfile(VsCodeWorkspace workspace, string workspaceUri,
+            Dictionary<string, string> profileAssociations, Dictionary<string, string> profileNames)
+        {
+            if (workspace == null || string.IsNullOrEmpty(workspaceUri) || profileAssociations == null)
+                return workspace;
+
+            var normalizedWorkspaceUri = Uri.UnescapeDataString(workspaceUri);
+            if (!TryGetProfileId(profileAssociations, workspaceUri, out var profileId) &&
+                !TryGetProfileId(profileAssociations, normalizedWorkspaceUri, out profileId) &&
+                !TryGetProfileId(profileAssociations, workspace.Path.ToString(), out profileId))
+            {
+                return workspace;
+            }
+
+            return workspace with
+            {
+                ProfileName = profileNames.TryGetValue(profileId, out var profileName) ? profileName : profileId
+            };
+        }
+
+        private static bool TryGetProfileId(Dictionary<string, string> profileAssociations, string workspaceUri,
+            out string profileId)
+        {
+            profileId = null;
+
+            return !string.IsNullOrEmpty(workspaceUri) &&
+                   profileAssociations.TryGetValue(workspaceUri, out profileId);
         }
 
         [CanBeNull]
@@ -173,11 +253,13 @@ namespace Flow.Plugin.VSCodeWorkspaces.WorkspacesHelper
 
         [CanBeNull]
         private VsCodeWorkspace ParseWorkspaceEntry(JsonElement workspaceInfo, VSCodeInstance vscodeInstance,
-            JsonElement entry)
+            JsonElement entry, Dictionary<string, string> profileAssociations, Dictionary<string, string> profileNames)
         {
             if (workspaceInfo.TryGetProperty("configPath", out var configPath))
             {
-                var workspace = ParseVSCodeUri(configPath.GetString(), vscodeInstance);
+                var configPathString = configPath.GetString();
+                var workspace = WithProfile(ParseVSCodeUri(configPathString, vscodeInstance), configPathString,
+                    profileAssociations, profileNames);
                 if (workspace == null)
                     return null;
 
@@ -201,10 +283,11 @@ namespace Flow.Plugin.VSCodeWorkspaces.WorkspacesHelper
 
         [CanBeNull]
         private VsCodeWorkspace ParseFolderEntry(JsonElement folderUri, VSCodeInstance vscodeInstance,
-            JsonElement entry)
+            JsonElement entry, Dictionary<string, string> profileAssociations, Dictionary<string, string> profileNames)
         {
             var workspaceUri = folderUri.GetString();
-            var workspace = ParseVSCodeUri(workspaceUri, vscodeInstance);
+            var workspace = WithProfile(ParseVSCodeUri(workspaceUri, vscodeInstance), workspaceUri, profileAssociations,
+                profileNames);
             if (workspace == null)
                 return null;
 

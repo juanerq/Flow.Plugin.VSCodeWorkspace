@@ -139,15 +139,20 @@ namespace Flow.Plugin.VSCodeWorkspaces
             var tooltip =
                 $"{Resources.Workspace}{(ws.WorkspaceLocation != WorkspaceLocation.Local ? $" {Resources.In} {typeWorkspace}" : string.Empty)}: {SystemPath.RealPath(ws.RelativePath)}";
             var gitStatus = _settings.ShowGitStatus ? GitStatusHelper.GetStatus(ws) : null;
-            var subtitle = string.IsNullOrEmpty(gitStatus)
+            var metadata = new List<string>();
+            if (!string.IsNullOrEmpty(gitStatus))
+                metadata.Add(gitStatus);
+
+            var subtitle = metadata.Count == 0
                 ? tooltip
-                : $"{tooltip}  |  {gitStatus}";
+                : $"{tooltip}  |  {string.Join("  |  ", metadata)}";
+            var profileIconPath = ProfileIconHelper.GetIconPath(ws.ProfileName);
 
             return new Result
             {
                 Title = title,
                 SubTitle = subtitle,
-                Icon = () => GetWorkspaceIcon(ws),
+                Icon = () => GetWorkspaceIcon(ws, profileIconPath),
                 TitleToolTip = subtitle,
                 Action = c =>
                 {
@@ -189,8 +194,12 @@ namespace Flow.Plugin.VSCodeWorkspaces
             };
         }
 
-        private static System.Windows.Media.ImageSource GetWorkspaceIcon(VsCodeWorkspace ws)
+        private static System.Windows.Media.ImageSource GetWorkspaceIcon(VsCodeWorkspace ws, string profileIconPath)
         {
+            var profileIcon = SvgIconHelper.GetIcon(profileIconPath);
+            if (profileIcon != null)
+                return profileIcon;
+
             return ws.WorkspaceLocation == WorkspaceLocation.RemoteWSL
                 ? WslDistributionIconHelper.GetIcon(ws.ExtraInfo) ?? ws.VSCodeInstance.WorkspaceIcon()
                 : ws.VSCodeInstance.WorkspaceIcon();
