@@ -131,7 +131,9 @@ namespace Flow.Plugin.VSCodeWorkspaces
 
             if (ws.WorkspaceLocation != WorkspaceLocation.Local)
             {
-                title = $"{title}{(ws.ExtraInfo != null ? $" - {ws.ExtraInfo}" : string.Empty)} ({typeWorkspace})";
+                title = ws.WorkspaceLocation == WorkspaceLocation.RemoteWSL
+                    ? $"{title} ({typeWorkspace})"
+                    : $"{title}{(ws.ExtraInfo != null ? $" - {ws.ExtraInfo}" : string.Empty)} ({typeWorkspace})";
             }
 
             var tooltip =
@@ -145,7 +147,7 @@ namespace Flow.Plugin.VSCodeWorkspaces
             {
                 Title = title,
                 SubTitle = subtitle,
-                Icon = ws.VSCodeInstance.WorkspaceIcon,
+                Icon = () => GetWorkspaceIcon(ws),
                 TitleToolTip = subtitle,
                 Action = c =>
                 {
@@ -185,6 +187,13 @@ namespace Flow.Plugin.VSCodeWorkspaces
                 },
                 ContextData = ws,
             };
+        }
+
+        private static System.Windows.Media.ImageSource GetWorkspaceIcon(VsCodeWorkspace ws)
+        {
+            return ws.WorkspaceLocation == WorkspaceLocation.RemoteWSL
+                ? WslDistributionIconHelper.GetIcon(ws.ExtraInfo) ?? ws.VSCodeInstance.WorkspaceIcon()
+                : ws.VSCodeInstance.WorkspaceIcon();
         }
 
         public void Init(PluginInitContext context)
