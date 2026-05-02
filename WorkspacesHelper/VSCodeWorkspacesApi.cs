@@ -60,6 +60,45 @@ namespace Flow.Plugin.VSCodeWorkspaces.WorkspacesHelper
 
                 foreach (var vscodeInstance in VSCodeInstances.Instances)
                 {
+                    // for vscode v1.64.0 or later
+                    var stateDatabasePath = GetStateDatabasePath(vscodeInstance);
+                    if (stateDatabasePath != null)
+                    {
+                        var connectionString = new SqliteConnectionStringBuilder
+                        {
+                            DataSource = stateDatabasePath,
+                            Mode = SqliteOpenMode.ReadOnly,
+                            Cache = SqliteCacheMode.Shared
+                        }.ToString();
+
+                        using var connection = new SqliteConnection(connectionString);
+                        connection.Open();
+                        var command = connection.CreateCommand();
+                        command.CommandText = "SELECT value FROM ItemTable where key = 'history.recentlyOpenedPathsList'";
+                        var result = command.ExecuteScalar();
+                        if (result != null)
+                        {
+                            using var historyDoc = JsonDocument.Parse(result.ToString()!);
+                            var root = historyDoc.RootElement;
+                            if (root.TryGetProperty("entries", out var entries))
+                            {
+                                foreach (var entry in entries.EnumerateArray())
+                                {
+                                    if (entry.TryGetProperty("folderUri", out var folderUri) &&
+                                        ParseFolderEntry(folderUri, vscodeInstance, entry) is { } folderWorkspace)
+                                    {
+                                        results.Add(folderWorkspace);
+                                    }
+                                    else if (entry.TryGetProperty("workspace", out var workspaceInfo) &&
+                                             ParseWorkspaceEntry(workspaceInfo, vscodeInstance, entry) is { } workspace)
+                                    {
+                                        results.Add(workspace);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // storage.json contains opened Workspaces
                     var vscodeStorage = Path.Combine(vscodeInstance.AppData, "storage.json");
 
@@ -97,44 +136,6 @@ namespace Flow.Plugin.VSCodeWorkspaces.WorkspacesHelper
                         {
                             var message = $"Failed to deserialize ${vscodeStorage}";
                             Main.Context.API.LogException("VSCodeWorkspaceApi", message, ex);
-                        }
-                    }
-
-                    // for vscode v1.64.0 or later
-                    var stateDatabasePath = GetStateDatabasePath(vscodeInstance);
-                    if (stateDatabasePath == null)
-                        continue;
-
-                    var connectionString = new SqliteConnectionStringBuilder
-                    {
-                        DataSource = stateDatabasePath,
-                        Mode = SqliteOpenMode.ReadOnly,
-                        Cache = SqliteCacheMode.Shared
-                    }.ToString();
-
-                    using var connection = new SqliteConnection(connectionString);
-                    connection.Open();
-                    var command = connection.CreateCommand();
-                    command.CommandText = "SELECT value FROM ItemTable where key = 'history.recentlyOpenedPathsList'";
-                    var result = command.ExecuteScalar();
-                    if (result != null)
-                    {
-                        using var historyDoc = JsonDocument.Parse(result.ToString()!);
-                        var root = historyDoc.RootElement;
-                        if (!root.TryGetProperty("entries", out var entries))
-                            continue;
-                        foreach (var entry in entries.EnumerateArray())
-                        {
-                            if (entry.TryGetProperty("folderUri", out var folderUri) &&
-                                ParseFolderEntry(folderUri, vscodeInstance, entry) is { } folderWorkspace)
-                            {
-                                results.Add(folderWorkspace);
-                            }
-                            else if (entry.TryGetProperty("workspace", out var workspaceInfo) &&
-                                     ParseWorkspaceEntry(workspaceInfo, vscodeInstance, entry) is { } workspace)
-                            {
-                                results.Add(workspace);
-                            }
                         }
                     }
                 }

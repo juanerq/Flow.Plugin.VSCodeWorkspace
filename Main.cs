@@ -38,17 +38,17 @@ namespace Flow.Plugin.VSCodeWorkspaces
             var results = new List<Result>();
             var workspaces = new List<VsCodeWorkspace>();
 
+            // Search opened workspaces
+            if (_settings.DiscoverWorkspaces)
+            {
+                workspaces.AddRange(_workspacesApi.Workspaces);
+            }
+
             // User defined extra workspaces
             if (_defaultInstance != null)
             {
                 workspaces.AddRange(_settings.CustomWorkspaces.Select(uri =>
                     VSCodeWorkspacesApi.ParseVSCodeUri(uri, _defaultInstance)));
-            }
-
-            // Search opened workspaces
-            if (_settings.DiscoverWorkspaces)
-            {
-                workspaces.AddRange(_workspacesApi.Workspaces);
             }
 
             // Simple de-duplication
